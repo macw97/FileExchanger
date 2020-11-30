@@ -1,0 +1,11 @@
+*.pyc
+__pycache__
+*.so
+*.o
+dist
+build
+MANIFEST
+*.egg-info
+.vs/
+*.sln
+*.pyproj
