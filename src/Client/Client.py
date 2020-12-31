@@ -2,56 +2,123 @@ import socket
 import logging
 import sys
 import os
+import time
 
 BUFFER_SIZE=4096
 PORT=5000
+
+def IP_validation(address):
+    try:
+        socket.inet_aton(address)
+    except socket.error as msg:
+        print('Address is not IPv4 : {0}'.format(msg))
+        return False
+    return True
 
 def read_and_send(client_socket,filename):
      with open(filename,"rb") as file:
             while True:
                 byte_read=file.read(BUFFER_SIZE)
                 if not byte_read:
-                    reading=False
                     break
                 client_socket.sendall(byte_read)
-            
 
+def recv_file(client_socket,filename):
+    with open(filename,"wb") as file:
+            while True :
+                byte_read=client_socket.recv(BUFFER_SIZE)
+                if not byte_read:
+                    break
+                file.write(byte_read)
+            
 class Client:
-    def __init__(self,ip_address,port,file_name):
+    def __init__(self,ip_address,port):
         self.ip_address=ip_address
         self.port=port
-        self.file_name=file_name
+        self.command=''
 
     def socket_error_handler(self,exception_msg,exception_place,fd_socket):
         print("{0} : {1}".format(exception_place,exception_msg))
         sys.exit(1)
 
-    def start(self):
+    def print_commands(self):
+        print('Commands man:\n')
+        print('send - \n')
+        print('download - \n')
+        print('ls - \n')
+        print('help - \n')
+        print('rm - \n')
+
+    def handleCmd(self):
+        if self.command =='':
+            print('No command provided\n')
+            return ''
+        elif self.command.lower() == 'help':
+            self.print_commands()
+            return ''
+        elif self.command.lower() == 'ls':
+            return 'list_directory'
+        elif self.command.lower() == 'close':
+            return self.command.lower()
+        elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'send':
+            if os.path.exists(self.command.split()[1]) :
+                return self.command
+            else :
+                print('File doesn\'t exist\n')
+                return ''
+        elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'download':
+            if os.path.exists(self.command.split()[1]) : 
+                return self.command
+            else :
+                print('File doesn\'t exist\n')
+                return ''
+        else :
+              return ''
+
+    def run(self):
         try:
             client_socket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         except socket.error as msg:
-            self.socket_error_handler(msg,'Client_start()',client_socket)
+            self.socket_error_handler(msg,'Client_run()',client_socket)
         try:
             client_socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
         except socket.error as msg:
-            self.socket_error_handler(msg,'Client_start()',client_socket)
-        print(f"Server address : {self.ip_address} file to send : {self.file_name}")
+            self.socket_error_handler(msg,'Client_run()',client_socket)
+        print(f"Server address : {self.ip_address}")
         try:
             client_socket.connect((self.ip_address,self.port))
         except socket.error as msg:
-            self.socket_error_handler(msg,'Client_start()',client_socket)
-        print(f"Message {self.file_name}")
-        try:
-            client_socket.send(f"{self.file_name}".encode())
-        except socket.error as msg:
-            self.socket_error_handler(msg,'Client_start()',client_socket)
-        read_and_send(client_socket,self.file_name)
+            self.socket_error_handler(msg,'Client_run()',client_socket)
+
+        while self.command!='close':
+            self.command = ''
+            self.command = input()
+            self.command = self.handleCmd()
+            if self.command =='':
+                continue
+            elif self.command == 'close':
+                print('Closing socket\n')
+            else :
+                try: 
+                    print("Message send: {0}".format(self.command))
+                    client_socket.send(self.command.encode())
+                except socket.error as error:
+                    self.socket_error_handler(msg,'Client_run()',client_socket)
+
+                if len(self.command.split()) == 2 :
+                    if self.command.lower().split()[0] == 'send' :
+                        read_and_send(client_socket,self.command.split()[1])
+                    elif self.command.lower().split()[0] == 'download' :
+                        recv_file(client_socket,self.command.split()[1])
+                else :
+                    pass
+        
         client_socket.close()
 
 
 
 if __name__ == "__main__":
     print(f"Script arugment: {sys.argv[1]}")
-    print(f"File to send : {sys.argv[2]}")
-    first_Client=Client(sys.argv[1],PORT,sys.argv[2])
-    first_Client.start()
+    if IP_validation(sys.argv[1]) :
+        first_Client=Client(sys.argv[1],PORT)
+        first_Client.run()

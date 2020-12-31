@@ -5,6 +5,7 @@ import sys
 import time
 import atexit
 import select
+import random
 
 PORT=5000
 BUFFER_SIZE=4096
@@ -12,18 +13,26 @@ BUFFER_SIZE=4096
 def get_logger_file(name,file_path,log_level):
     log_file=logging.getLogger(name)
     log_file.setLevel(log_level)
-    handler=logging.FileHandler(file_path)
+    # mode = write provides logging for only this run of program
+    handler=logging.FileHandler(file_path, mode ='w')
     handler_format=logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     handler.setFormatter(handler_format)
     log_file.addHandler(handler)
     return log_file
+
+def read_and_send(client_socket,filename):
+     with open(filename,"rb") as file:
+            while True:
+                byte_read=file.read(BUFFER_SIZE)
+                if not byte_read:
+                    break
+                client_socket.sendall(byte_read)
 
 def recv_file(client_socket,filename):
     with open(filename,"wb") as file:
             while True :
                 byte_read=client_socket.recv(BUFFER_SIZE)
                 if not byte_read:
-                    reading=False
                     break
                 file.write(byte_read)
 class Daemon:
@@ -98,7 +107,9 @@ class Server(Daemon):
         super().__init__('/tmp/deamon-test.pid')
         self.ip_address=ip_address
         self.port=port
+        # Creating/opening log file and erasing content  
         self.log_file=get_logger_file("log_operations","/var/log/server.log",logging.DEBUG)
+        self.log_file
     
     def socket_error_handler(exception_msg,exception_place,fd_socket):
         self.log_file.error("%s : %s".format(exception_place,exception_msg))
@@ -128,48 +139,61 @@ class Server(Daemon):
         # epoll object creation
         epoll = select.epoll()
         epoll.register(fd_socket.fileno(),select.EPOLLIN | select.EPOLLOUT)
-
+        self.log_file.debug("Server_run(): epoll object created")
+        # each client gets unique Id
+        unique_id_array=list(range(100,150))
+        random.shuffle(unique_id_array)
+        self.log_file.debug("Server_run(): unique ids prepared")
+        i=0
         try: 
             connections={}
+            id={}
             requests={}
             responses={}
             firstMessage={}
             while True:
                 # waiting up to 30 seconds for event to occure and return query epoll object 
-                events = epoll.poll(30)
+                events = epoll.poll(60)
                 for fileno, event in events:
                     # if event occurse on the server socket then a new socket connection show up
                     if fileno == fd_socket.fileno():
                         self.log_file.info("Server_run(): new connection found")
                         connection, address = fd_socket.accept()
+                        connection.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
                         connection.setblocking(False)
                         epoll.register(connection.fileno(),select.EPOLLIN | select.EPOLLOUT)
                         connections[connection.fileno()] = connection
+                        id[connection.fileno()]=unique_id_array[i]
+                        i=i+1
                         requests[connection.fileno()] =''
                         responses[connection.fileno()] =''
-                        firstMessage[connection.fileno()] = True
-                        self.log_file.info("Server_run(): connection {0} added to epoll".format(address))
+                        self.log_file.info("Server_run(): connection {0} added to epoll with id - {1}".format(address,id[connection.fileno()]))
                     elif event & select.EPOLLIN:
                         # read data because EPOLLIN event occured
-                        if firstMessage[fileno] == True :
-                            filename=connections[fileno].recv(BUFFER_SIZE).decode()
-                            self.log_file.info("Server_run(): received message/data - {0}".format(filename))
-                            filename=os.path.basename(filename)
-                            self.log_file.info("Server_run(): download file {0}".format(filename))
-                            recv_file(connections[fileno],filename)
-                            self.log_file.info("Server_run(): fileno = {0} ended downloading file {1}".format(fileno,filename))
-                            firstMessage[fileno] = False
+                        self.log_file.info("Server_run(): EPOLLIN occured id - {0}".format(id[fileno]))
+                        while byte_read !=0 :
+                            byte_read = connections[fileno].recv(BUFFER_SIZE)
+                            msg = byte_read.decode()
+                            self.log_file.info("Server_run(): msg occured id - {0} msg {1}".format(id[fileno],msg))
+                            requests[fileno]+=msg
+                        self.log_file.info("Server_run(): id - {0} received message - {1}".format(id[fileno],command))
+                        (cmd , filename) = requests[fileno].split()
+                        filename=os.path.basename(filename)
+                        self.log_file.info("Server_run(): id - {0} do {1} file {2}".format(id[fileno],cmd,filename))
+                        recv_file(connections[fileno],filename)
+                        self.log_file.info("Server_run(): id - {0} ended downloading file {1}".format(id[fileno],filename))
                     elif event & select.EPOLLOUT:
-                        # write data because EPOLLOUT event occured
-                        byteswritten = connections[fileno].send(responses[fileno])
-                        responses[fileno] = responses[fileno][byteswritten:]
-                        self.log_file.info("Server_run(): write message/data - {0}".format(responses[fileno]))
+                        # write data because EPOLLOUT event occured. Add ls command 
+                        self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
+                        responses[fileno]= read_and_send(connections[fileno],requests[fileno].split()[1])
+                        self.log_file.info("Server_run(): id - {0} write data - {1}".format(id[fileno],responses[fileno]))
                     elif event & select.EPOLLHUP:
                         # delete socket connection from epoll because client hang up
                         epoll.unregister(fileno)
-                        self.log_file.info("Server_run(): fileno = {0} unregister from epoll".format(fileno))
+                        self.log_file.info("Server_run(): id - {0} unregister from epoll".format(id[fileno]))
                         connections[fileno].close()
                         del connections[fileno]
+                        del id[fileno]
         finally:
             epoll.unregister(fd_socket.fileno())
             epoll.close()
