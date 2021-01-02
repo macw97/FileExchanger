@@ -14,7 +14,9 @@ def IP_validation(address):
         print('Address is not IPv4 : {0}'.format(msg))
         return False
     return True
-
+"""
+Funkcje read and send nie dzialaja i recv file
+"""
 def read_and_send(client_socket,filename):
      with open(filename,"rb") as file:
             while True:
@@ -107,9 +109,11 @@ class Client:
 
                 if len(self.command.split()) == 2 :
                     if self.command.lower().split()[0] == 'send' :
-                        read_and_send(client_socket,self.command.split()[1])
+                        pass
+                    #    read_and_send(client_socket,self.command.split()[1])
                     elif self.command.lower().split()[0] == 'download' :
-                        recv_file(client_socket,self.command.split()[1])
+                        pass
+                    #    recv_file(client_socket,self.command.split()[1])
                 else :
                     pass
         
