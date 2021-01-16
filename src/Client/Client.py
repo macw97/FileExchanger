@@ -21,6 +21,7 @@ def read_and_send(client_socket,filename):
      with open(filename,"rb") as file:
             while True:
                 byte_read=file.read(BUFFER_SIZE)
+                print(byte_read)
                 if not byte_read:
                     break
                 client_socket.sendall(byte_read)
@@ -28,8 +29,9 @@ def read_and_send(client_socket,filename):
 def recv_file(client_socket,filename):
     with open(filename,"wb") as file:
             while True :
-                byte_read=client_socket.recv(BUFFER_SIZE)
-                if not byte_read:
+                byte_read = client_socket.recv(BUFFER_SIZE)
+                print(byte_read)
+                if byte_read == b'\n':
                     break
                 file.write(byte_read)
             
@@ -69,11 +71,7 @@ class Client:
                 print('File doesn\'t exist\n')
                 return ''
         elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'download':
-            if os.path.exists(self.command.split()[1]) : 
-                return self.command
-            else :
-                print('File doesn\'t exist\n')
-                return ''
+            return self.command
         else :
               return ''
 
@@ -93,9 +91,11 @@ class Client:
             self.socket_error_handler(msg,'Client_run()',client_socket)
 
         while self.command!='close':
+            print("Type a command")
             self.command = ''
             self.command = input()
             self.command = self.handleCmd()
+            print("Provided command: ", self.command)
             if self.command =='':
                 continue
             elif self.command == 'close':
@@ -109,11 +109,9 @@ class Client:
 
                 if len(self.command.split()) == 2 :
                     if self.command.lower().split()[0] == 'send' :
-                        pass
-                    #    read_and_send(client_socket,self.command.split()[1])
+                        read_and_send(client_socket,self.command.split()[1])
                     elif self.command.lower().split()[0] == 'download' :
-                        pass
-                    #    recv_file(client_socket,self.command.split()[1])
+                        recv_file(client_socket,self.command.split()[1])
                 else :
                     pass
         
