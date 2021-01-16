@@ -22,16 +22,18 @@ def read_and_send(client_socket,filename):
             while True:
                 byte_read=file.read(BUFFER_SIZE)
                 print(byte_read)
-                if not byte_read:
+                if not  byte_read:
                     break
-                client_socket.sendall(byte_read)
+                client_socket.send(byte_read)
 
 def recv_file(client_socket,filename):
     with open(filename,"wb") as file:
             while True :
                 byte_read = client_socket.recv(BUFFER_SIZE)
                 print(byte_read)
-                if byte_read == b'\n':
+                if b'\r\n\r' in byte_read:
+                    byte_read = byte_read[0: len(byte_read)-6]
+                    file.write(byte_read)
                     break
                 file.write(byte_read)
             
