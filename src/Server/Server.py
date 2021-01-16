@@ -25,25 +25,30 @@ Funkcje read_and_send nie dzialaja i recv_file
 otwiera plik po czym zawiesz sie na byte_read=client_socket.recv w recv_file i zamyka caly epoll
 + blokuje przyszle polaczenia i robi broken pipe 
 """
-def read_and_send(client_socket,filename):
-     with open(filename,"rb") as file:
-            while True:
-                byte_read=file.read(BUFFER_SIZE)
-                if not byte_read:
-                    break
-                client_socket.sendall(byte_read)
+def read_and_send(client_socket, filename, logger):
+    logger.debug("read_and_send() Started sending file {0}".format(filename))
+    with open(filename, "rb") as file:
+        byte_read = file.read(BUFFER_SIZE)
+        while byte_read:
+            client_socket.sendall(byte_read)
+            byte_read = file.read(BUFFER_SIZE)
+    client_socket.sendall(b'\n')
+    logger.debug("read_and_send() Finished sending file {0}".format(filename))
+
 
 def recv_file(client_socket,filename,logger):
     logger.debug("recv_file(): Started download file {0}".format(filename))
     with open(filename,"wb") as file:
             while True :
-                logger.debug("recv_file(): download")
-                byte_read=client_socket.recv(BUFFER_SIZE)
-                if not byte_read:
+                try:
+                    byte_read=client_socket.recv(BUFFER_SIZE)
+                    logger.debug(byte_read)
+                    logger.debug("recv_file(): download")
+                    file.write(byte_read)
+                    logger.debug("recv_file(): write to file")
+                except:
                     logger.debug("recv_file(): end of download")
                     break
-                file.write(byte_read)
-                logger.debug("recv_file(): write to file")
 class Daemon:
     def __init__(self,pidfile):
         self.pidfile=pidfile
@@ -160,7 +165,8 @@ class Server(Daemon):
             requests={}
             responses={}
             while True:
-                # waiting up to 60 seconds for event to occure and return query epoll object 
+                # waiting up to 60 seconds for event to occure and return query epoll object
+                #time.sleep(1)
                 events = epoll.poll(60)
                 for fileno, event in events:
                     # if event occurse on the server socket then a new socket connection show up
@@ -183,9 +189,14 @@ class Server(Daemon):
                         self.log_file.info("Server_run(): id - {0} received message - {1}".format(id[fileno],requests[fileno]))
                         (cmd , filename) = requests[fileno].split()
                         filename=os.path.basename(filename)
-                        self.log_file.info("Server_run(): id - {0} do {1} file {2}".format(id[fileno],cmd,filename))
-                        #recv_file(connections[fileno],filename,self.log_file)
-                        self.log_file.info("Server_run(): id - {0} ended downloading file {1}".format(id[fileno],filename))
+                        if cmd == b'send':
+                            self.log_file.info("Server_run(): id - {0} do {1} file {2}".format(id[fileno],cmd,filename))
+                            recv_file(connections[fileno],filename,self.log_file)
+                            self.log_file.info("Server_run(): id - {0} ended downloading file {1}".format(id[fileno],filename))
+                        elif cmd == b'download':
+                            self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
+                            read_and_send(connections[fileno],requests[fileno].split()[1].decode("utf-8"), self.log_file)
+                            #self.log_file.info("Server_run(): id - {0} write data - {1}".format(id[fileno],responses[fileno]))
                     elif event & select.EPOLLOUT:
                         # write data because EPOLLOUT event occured. Add ls command 
                         self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
@@ -199,8 +210,9 @@ class Server(Daemon):
                         del connections[fileno]
                         del id[fileno]
         finally:
-            epoll.unregister(fd_socket.fileno())
+            epoll.unregister(fd_socket.fileno())            
             epoll.close()
+            self.log_file.info("Server_run(): server closed")
             fd_socket.close()
 
 
