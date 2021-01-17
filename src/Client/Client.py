@@ -14,9 +14,7 @@ def IP_validation(address):
         print('Address is not IPv4 : {0}'.format(msg))
         return False
     return True
-"""
-Funkcje read and send nie dzialaja i recv file
-"""
+
 def read_and_send(client_socket,filename):
      with open(filename,"rb") as file:
             while True:
@@ -32,11 +30,23 @@ def recv_file(client_socket,filename):
                 byte_read = client_socket.recv(BUFFER_SIZE)
                 print(byte_read)
                 if b'\r\n\r' in byte_read:
-                    byte_read = byte_read[0: len(byte_read)-6]
+                    byte_read = byte_read[0: len(byte_read)-3]
                     file.write(byte_read)
                     break
                 file.write(byte_read)
-            
+
+def get_list_directory(client_socket):
+    list_directory = ""
+    while True:
+        byte_read = client_socket.recv(BUFFER_SIZE)
+        if b'\r\n\r' in byte_read:
+            byte_read = byte_read[0: len(byte_read)-3]
+            list_directory += byte_read.decode("utf-8")
+            break
+        list_directory += byte_read.decode("utf-8")
+    print(list_directory)
+
+
 class Client:
     def __init__(self,ip_address,port):
         self.ip_address=ip_address
@@ -74,6 +84,8 @@ class Client:
                 return ''
         elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'download':
             return self.command
+        elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'rm':
+            return self.command
         else :
               return ''
 
@@ -101,6 +113,7 @@ class Client:
             if self.command =='':
                 continue
             elif self.command == 'close':
+                client_socket.send(self.command.encode())
                 print('Closing socket\n')
             else :
                 try: 
@@ -108,12 +121,15 @@ class Client:
                     client_socket.send(self.command.encode())
                 except socket.error as error:
                     self.socket_error_handler(msg,'Client_run()',client_socket)
-
+                if self.command.lower() == 'list_directory':
+                    get_list_directory(client_socket)
                 if len(self.command.split()) == 2 :
                     if self.command.lower().split()[0] == 'send' :
                         read_and_send(client_socket,self.command.split()[1])
                     elif self.command.lower().split()[0] == 'download' :
                         recv_file(client_socket,self.command.split()[1])
+                    elif self.command.lower().split()[0] == 'rm' :
+                        print("File {} has been removed".format(self.command.split()[1]))
                 else :
                     pass
         
