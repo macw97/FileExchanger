@@ -34,6 +34,9 @@ def recv_file(client_socket,filename):
                     file.write(byte_read)
                     break
                 file.write(byte_read)
+    if os.stat(filename).st_size == 0:
+        print("File does not exist or is empty")
+        os.remove(filename)
 
 def get_list_directory(client_socket):
     list_directory = ""
@@ -46,6 +49,9 @@ def get_list_directory(client_socket):
         list_directory += byte_read.decode("utf-8")
     print(list_directory)
 
+def remove_file_info(client_socket):
+    byte_read = client_socket.recv(BUFFER_SIZE)
+    print(byte_read.decode("utf-8"))
 
 class Client:
     def __init__(self,ip_address,port):
@@ -125,11 +131,12 @@ class Client:
                     get_list_directory(client_socket)
                 if len(self.command.split()) == 2 :
                     if self.command.lower().split()[0] == 'send' :
+                        client_socket.send(b'\n')
                         read_and_send(client_socket,self.command.split()[1])
                     elif self.command.lower().split()[0] == 'download' :
                         recv_file(client_socket,self.command.split()[1])
                     elif self.command.lower().split()[0] == 'rm' :
-                        print("File {} has been removed".format(self.command.split()[1]))
+                        remove_file_info(client_socket)
                 else :
                     pass
         
