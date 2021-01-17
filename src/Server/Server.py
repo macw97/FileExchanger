@@ -30,9 +30,9 @@ def read_and_send(client_socket, filename, logger):
     with open(filename, "rb") as file:
         byte_read = file.read(BUFFER_SIZE)
         while byte_read:
-            client_socket.sendall(byte_read)
+            client_socket.send("read_and_send() Started sending file {0}".format(byte_read))
             byte_read = file.read(BUFFER_SIZE)
-    client_socket.sendall(b'\n')
+    client_socket.send(b'\r\n\r')
     logger.debug("read_and_send() Finished sending file {0}".format(filename))
 
 
@@ -42,13 +42,31 @@ def recv_file(client_socket,filename,logger):
             while True :
                 try:
                     byte_read=client_socket.recv(BUFFER_SIZE)
-                    logger.debug(byte_read)
-                    logger.debug("recv_file(): download")
+                    logger.debug("recv_file(): download {0}".format(byte_read))
                     file.write(byte_read)
                     logger.debug("recv_file(): write to file")
                 except:
                     logger.debug("recv_file(): end of download")
                     break
+
+def send_list_directory(client_socket, logger):
+    logger.debug("send_list_directory(): Creating list")
+    list_directory = os.listdir()
+    for file in list_directory:
+        if file == 'Server.py':
+            continue
+        client_socket.send(file.encode("utf-8"))
+        client_socket.send(b'\n')
+    client_socket.send(b'\r\n\r')
+
+def remove_file(filename,logger):
+    try:
+        os.remove(filename)
+        logger.debug("remove_file(): file succesfuly removed")
+    except:
+        logger.debug("remove_file(): file does not exist")
+
+
 class Daemon:
     def __init__(self,pidfile):
         self.pidfile=pidfile
@@ -187,16 +205,28 @@ class Server(Daemon):
                         self.log_file.info("Server_run(): EPOLLIN occured id - {0}".format(id[fileno]))
                         requests[fileno]=connections[fileno].recv(BUFFER_SIZE)
                         self.log_file.info("Server_run(): id - {0} received message - {1}".format(id[fileno],requests[fileno]))
-                        (cmd , filename) = requests[fileno].split()
-                        filename=os.path.basename(filename)
-                        if cmd == b'send':
-                            self.log_file.info("Server_run(): id - {0} do {1} file {2}".format(id[fileno],cmd,filename))
-                            recv_file(connections[fileno],filename,self.log_file)
-                            self.log_file.info("Server_run(): id - {0} ended downloading file {1}".format(id[fileno],filename))
-                        elif cmd == b'download':
-                            self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
-                            read_and_send(connections[fileno],requests[fileno].split()[1].decode("utf-8"), self.log_file)
-                            #self.log_file.info("Server_run(): id - {0} write data - {1}".format(id[fileno],responses[fileno]))
+                        if requests[fileno] == b'list_directory':
+                            send_list_directory(connections[fileno], self.log_file)
+                            self.log_file.info("Server_run(): id - {0} list directory sent".format(id[fileno]))
+                        elif requests[fileno] == b'close':
+                            epoll.unregister(fileno)
+                            self.log_file.info("Server_run(): id - {0} unregister from epoll".format(id[fileno]))
+                            connections[fileno].close()
+                            del connections[fileno]
+                            del id[fileno]
+                        else:
+                            (cmd , filename) = requests[fileno].split()
+                            filename=os.path.basename(filename)
+                            if cmd == b'send':
+                                self.log_file.info("Server_run(): id - {0} do {1} file {2}".format(id[fileno],cmd,filename))
+                                recv_file(connections[fileno],filename,self.log_file)
+                                self.log_file.info("Server_run(): id - {0} ended downloading file {1}".format(id[fileno],filename))
+                            elif cmd == b'download':
+                                self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
+                                read_and_send(connections[fileno],requests[fileno].split()[1].decode("utf-8"), self.log_file)
+                            elif cmd == b'rm':
+                                self.log_file.info("Server_run(): id - {0} send request to remove file - {1}".format(id[fileno],requests[fileno].split()[1]))
+                                remove_file(filename,self.log_file)
                     elif event & select.EPOLLOUT:
                         # write data because EPOLLOUT event occured. Add ls command 
                         self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
