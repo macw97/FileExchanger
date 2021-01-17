@@ -10,6 +10,13 @@ import random
 PORT=5000
 BUFFER_SIZE=4096
 
+def find_newline(bytes):
+    for b in range(len(bytes)):
+        print(bytes[b])
+        if bytes[b] == 10:
+            return b
+    return len(bytes)
+
 def get_logger_file(name,file_path,log_level):
     log_file=logging.getLogger(name)
     log_file.setLevel(log_level)
@@ -20,34 +27,35 @@ def get_logger_file(name,file_path,log_level):
     log_file.addHandler(handler)
     return log_file
 
-"""
-Funkcje read_and_send nie dzialaja i recv_file
-otwiera plik po czym zawiesz sie na byte_read=client_socket.recv w recv_file i zamyka caly epoll
-+ blokuje przyszle polaczenia i robi broken pipe 
-"""
 def read_and_send(client_socket, filename, logger):
     logger.debug("read_and_send() Started sending file {0}".format(filename))
+    if not os.path.isfile(filename):
+        client_socket.send(b'\r\n\r')
+        logger.debug("read_and_send() Attempt to download file {0} failed, file does not exist".format(filename))
+        return
     with open(filename, "rb") as file:
         byte_read = file.read(BUFFER_SIZE)
         while byte_read:
-            client_socket.send("read_and_send() Started sending file {0}".format(byte_read))
+            logger.debug("read_and_send() sending  {0}".format(byte_read))
+            client_socket.send(byte_read)
             byte_read = file.read(BUFFER_SIZE)
     client_socket.send(b'\r\n\r')
     logger.debug("read_and_send() Finished sending file {0}".format(filename))
 
 
-def recv_file(client_socket,filename,logger):
+def recv_file(client_socket,filename,logger, buff):
     logger.debug("recv_file(): Started download file {0}".format(filename))
     with open(filename,"wb") as file:
-            while True :
-                try:
-                    byte_read=client_socket.recv(BUFFER_SIZE)
-                    logger.debug("recv_file(): download {0}".format(byte_read))
-                    file.write(byte_read)
-                    logger.debug("recv_file(): write to file")
-                except:
-                    logger.debug("recv_file(): end of download")
-                    break
+        file.write(buff)
+        while True :
+            try:
+                byte_read=client_socket.recv(BUFFER_SIZE)
+                logger.debug("recv_file(): download {0}".format(byte_read))
+                file.write(byte_read)
+                logger.debug("recv_file(): write to file")
+            except:
+                logger.debug("recv_file(): end of download")
+                break
 
 def send_list_directory(client_socket, logger):
     logger.debug("send_list_directory(): Creating list")
@@ -59,11 +67,13 @@ def send_list_directory(client_socket, logger):
         client_socket.send(b'\n')
     client_socket.send(b'\r\n\r')
 
-def remove_file(filename,logger):
+def remove_file(client_socket, filename, logger):
     try:
         os.remove(filename)
+        client_socket.send(b'file succesfuly removed')
         logger.debug("remove_file(): file succesfuly removed")
     except:
+        client_socket.send(b'file does not exist')
         logger.debug("remove_file(): file does not exist")
 
 
@@ -184,7 +194,6 @@ class Server(Daemon):
             responses={}
             while True:
                 # waiting up to 60 seconds for event to occure and return query epoll object
-                #time.sleep(1)
                 events = epoll.poll(60)
                 for fileno, event in events:
                     # if event occurse on the server socket then a new socket connection show up
@@ -215,30 +224,28 @@ class Server(Daemon):
                             del connections[fileno]
                             del id[fileno]
                         else:
-                            (cmd , filename) = requests[fileno].split()
-                            filename=os.path.basename(filename)
+                            endl = find_newline(requests[fileno])
+                            req = requests[fileno][0:endl]
+                            buff = requests[fileno][endl + 1 :]
+                            self.log_file.info("Server_run(): buff - {0}".format(buff))
+                            (cmd , filename) = req.split()
+                            filename = os.path.basename(filename)
                             if cmd == b'send':
                                 self.log_file.info("Server_run(): id - {0} do {1} file {2}".format(id[fileno],cmd,filename))
-                                recv_file(connections[fileno],filename,self.log_file)
+                                recv_file(connections[fileno],filename,self.log_file, buff)
                                 self.log_file.info("Server_run(): id - {0} ended downloading file {1}".format(id[fileno],filename))
                             elif cmd == b'download':
                                 self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
                                 read_and_send(connections[fileno],requests[fileno].split()[1].decode("utf-8"), self.log_file)
                             elif cmd == b'rm':
                                 self.log_file.info("Server_run(): id - {0} send request to remove file - {1}".format(id[fileno],requests[fileno].split()[1]))
-                                remove_file(filename,self.log_file)
+                                remove_file(connections[fileno], filename, self.log_file)
                     elif event & select.EPOLLOUT:
                         # write data because EPOLLOUT event occured. Add ls command 
-                        self.log_file.info("Server_run(): id - {0} send file - {1}".format(id[fileno],requests[fileno].split()[1]))
-                        responses[fileno]= read_and_send(connections[fileno],requests[fileno].split()[1])
-                        self.log_file.info("Server_run(): id - {0} write data - {1}".format(id[fileno],responses[fileno]))
+                        pass
                     elif event & select.EPOLLHUP:
                         # delete socket connection from epoll because client hang up
-                        epoll.unregister(fileno)
-                        self.log_file.info("Server_run(): id - {0} unregister from epoll".format(id[fileno]))
-                        connections[fileno].close()
-                        del connections[fileno]
-                        del id[fileno]
+                        pass
         finally:
             epoll.unregister(fd_socket.fileno())            
             epoll.close()
