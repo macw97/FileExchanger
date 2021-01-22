@@ -3,8 +3,13 @@ import logging
 import sys
 import os
 import time
+currentdir = os.path.dirname(os.path.realpath(__file__))
+parentdir = os.path.dirname(currentdir)
+sys.path.append(parentdir)
+import Tlv_block.py as tlv
 
 BUFFER_SIZE=4096
+TLV_SIZE = 6
 PORT=5000
 
 def IP_validation(address):
@@ -25,14 +30,18 @@ def read_and_send(client_socket,filename):
                 client_socket.send(byte_read)
 
 def recv_file(client_socket,filename):
+    tlv_data = client_socket.recv(TLV_SIZE)
+    tlv_decoded = tlv.decode_tlv(tlv_data)
+    if tlv_decoded[2] == 0:
+        print("File does not exist or is empty")
+        return
+    size = tlv_decoded[2]
+    bytes_received = 0
     with open(filename,"wb") as file:
-            while True :
+            while bytes_received < size :
                 byte_read = client_socket.recv(BUFFER_SIZE)
+                bytes_received += len(byte_read)
                 print(byte_read)
-                if b'\r\n\r' in byte_read:
-                    byte_read = byte_read[0: len(byte_read)-3]
-                    file.write(byte_read)
-                    break
                 file.write(byte_read)
     if os.stat(filename).st_size == 0:
         print("File does not exist or is empty")
@@ -118,28 +127,24 @@ class Client:
             print("Provided command: ", self.command)
             if self.command =='':
                 continue
-            elif self.command == 'close':
-                client_socket.send(self.command.encode())
-                print('Closing socket\n')
-            else :
-                try: 
-                    print("Message send: {0}".format(self.command))
-                    client_socket.send(self.command.encode())
-                except socket.error as error:
-                    self.socket_error_handler(msg,'Client_run()',client_socket)
-                if self.command.lower() == 'list_directory':
+            if len(self.command.split()) == 1:
+                tlv_data = tlv.Tlv_block(self.command)
+                client_socket.send(tlv_data.tlv)
+                if tlv_data.tvl[0] == 3: #list_directory
                     get_list_directory(client_socket)
-                if len(self.command.split()) == 2 :
-                    if self.command.lower().split()[0] == 'send' :
-                        client_socket.send(b'\n')
-                        read_and_send(client_socket,self.command.split()[1])
-                    elif self.command.lower().split()[0] == 'download' :
-                        recv_file(client_socket,self.command.split()[1])
-                    elif self.command.lower().split()[0] == 'rm' :
-                        remove_file_info(client_socket)
-                else :
-                    pass
-        
+                elif tlv_data.tvl[0] == 5: #close
+                    print('Closing socket\n')
+            elif len(self.command.split()) == 2:
+                tlv_data = tlv.Tlv_block(self.command.split()[0], self.command.split()[1])
+                client_socket.send(tlv_data.tlv)
+                client_socket.send(self.command.split()[1])
+                if tlv_data.tvl[0] == 1: #send
+                    read_and_send(client_socket, command.split()[1])
+                elif tlv_data.tvl[0] == 2: #download
+                    recv_file(client_socket, command.split()[1])
+                elif tlv_data.tvl[0] == 4: #rm
+                    remove_file_info(client_socket, command.split()[1])
+                
         client_socket.close()
 
 
