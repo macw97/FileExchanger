@@ -5,7 +5,6 @@ class Tlv_block:
         type = 0
         if cmd == "send": type = 1
         elif cmd == "download": type = 2
-<<<<<<< HEAD
         elif cmd == "list_directory": type = 3
         elif cmd == "rm": type = 4
         elif cmd == "close": type = 5
@@ -19,7 +18,6 @@ class Tlv_block:
         b_length = length.to_bytes(1, 'big')
         b_value = value.to_bytes(4, 'big')
         self.tlv = b_type + b_length + b_value
-=======
         elif cmd == "ls": type = 3
         elif cmd == "rm": type = 4
         length = 0
@@ -32,14 +30,9 @@ class Tlv_block:
         b_length = length.to_bytes(1, 'big')
         b_size = size.to_bytes(4, 'big')
         self.tlv = b_type + b_length + b_size
->>>>>>> 07196fbecd797c9fad95f606c5de001a0cc2acfb
 
 def decode_tlv(data):
     type = data.tlv[0]
     length = data.tlv[1]
     value = int.from_bytes(data.tlv[2:6], 'big')
-<<<<<<< HEAD
-    return (cmd, length, value)
-=======
     return (type, length, value)
->>>>>>> 07196fbecd797c9fad95f606c5de001a0cc2acfb
