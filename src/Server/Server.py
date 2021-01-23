@@ -43,7 +43,6 @@ def read_and_send(client_socket, filename, logger):
     with open(filename, "rb") as file:
         byte_read = file.read(BUFFER_SIZE)
         while byte_read:
-            logger.debug("read_and_send() sending  {0}".format(byte_read))
             client_socket.send(byte_read)
             byte_read = file.read(BUFFER_SIZE)
     logger.debug("read_and_send() Finished sending file {0}".format(filename))
@@ -56,7 +55,6 @@ def recv_file(client_socket, filename, logger, size):
         while bytes_received < size :
             byte_read = client_socket.recv(BUFFER_SIZE)
             bytes_received += len(byte_read)
-            logger.debug("recv_file(): download {0}".format(byte_read))
             file.write(byte_read)
             logger.debug("recv_file(): write to file")
         logger.debug("recv_file(): end of download")

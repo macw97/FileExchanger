@@ -6,7 +6,7 @@ import time
 currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
 sys.path.append(parentdir)
-import Tlv_block.py as tlv
+import Tlv_block as tlv
 
 BUFFER_SIZE=4096
 TLV_SIZE = 6
@@ -24,7 +24,6 @@ def read_and_send(client_socket,filename):
      with open(filename,"rb") as file:
             while True:
                 byte_read=file.read(BUFFER_SIZE)
-                print(byte_read)
                 if not  byte_read:
                     break
                 client_socket.send(byte_read)
@@ -41,7 +40,6 @@ def recv_file(client_socket,filename):
             while bytes_received < size :
                 byte_read = client_socket.recv(BUFFER_SIZE)
                 bytes_received += len(byte_read)
-                print(byte_read)
                 file.write(byte_read)
     if os.stat(filename).st_size == 0:
         print("File does not exist or is empty")
@@ -130,20 +128,20 @@ class Client:
             if len(self.command.split()) == 1:
                 tlv_data = tlv.Tlv_block(self.command)
                 client_socket.send(tlv_data.tlv)
-                if tlv_data.tvl[0] == 3: #list_directory
+                if tlv_data.tlv[0] == 3: #list_directory
                     get_list_directory(client_socket)
-                elif tlv_data.tvl[0] == 5: #close
+                elif tlv_data.tlv[0] == 5: #close
                     print('Closing socket\n')
             elif len(self.command.split()) == 2:
                 tlv_data = tlv.Tlv_block(self.command.split()[0], self.command.split()[1])
                 client_socket.send(tlv_data.tlv)
-                client_socket.send(self.command.split()[1])
-                if tlv_data.tvl[0] == 1: #send
-                    read_and_send(client_socket, command.split()[1])
-                elif tlv_data.tvl[0] == 2: #download
-                    recv_file(client_socket, command.split()[1])
-                elif tlv_data.tvl[0] == 4: #rm
-                    remove_file_info(client_socket, command.split()[1])
+                client_socket.send(self.command.split()[1].encode("utf-8"))
+                if tlv_data.tlv[0] == 1: #send
+                    read_and_send(client_socket, self.command.split()[1])
+                elif tlv_data.tlv[0] == 2: #download
+                    recv_file(client_socket, self.command.split()[1])
+                elif tlv_data.tlv[0] == 4: #rm
+                    remove_file_info(client_socket)
                 
         client_socket.close()
 
