@@ -3,8 +3,13 @@ import logging
 import sys
 import os
 import time
+currentdir = os.path.dirname(os.path.realpath(__file__))
+parentdir = os.path.dirname(currentdir)
+sys.path.append(parentdir)
+import Tlv_block as tlv
 
 BUFFER_SIZE=4096
+TLV_SIZE = 6
 PORT=5000
 
 def IP_validation(address):
@@ -14,25 +19,47 @@ def IP_validation(address):
         print('Address is not IPv4 : {0}'.format(msg))
         return False
     return True
-"""
-Funkcje read and send nie dzialaja i recv file
-"""
+
 def read_and_send(client_socket,filename):
      with open(filename,"rb") as file:
             while True:
                 byte_read=file.read(BUFFER_SIZE)
-                if not byte_read:
+                if not  byte_read:
                     break
-                client_socket.sendall(byte_read)
+                client_socket.send(byte_read)
 
 def recv_file(client_socket,filename):
+    tlv_data = client_socket.recv(TLV_SIZE)
+    tlv_decoded = tlv.decode_tlv(tlv_data)
+    if tlv_decoded[2] == 0:
+        print("File does not exist or is empty")
+        return
+    size = tlv_decoded[2]
+    bytes_received = 0
     with open(filename,"wb") as file:
-            while True :
-                byte_read=client_socket.recv(BUFFER_SIZE)
-                if not byte_read:
-                    break
+            while bytes_received < size :
+                byte_read = client_socket.recv(BUFFER_SIZE)
+                bytes_received += len(byte_read)
                 file.write(byte_read)
-            
+    if os.stat(filename).st_size == 0:
+        print("File does not exist or is empty")
+        os.remove(filename)
+
+def get_list_directory(client_socket):
+    list_directory = ""
+    while True:
+        byte_read = client_socket.recv(BUFFER_SIZE)
+        if b'\r\n\r' in byte_read:
+            byte_read = byte_read[0: len(byte_read)-3]
+            list_directory += byte_read.decode("utf-8")
+            break
+        list_directory += byte_read.decode("utf-8")
+    print(list_directory)
+
+def remove_file_info(client_socket):
+    byte_read = client_socket.recv(BUFFER_SIZE)
+    print(byte_read.decode("utf-8"))
+
 class Client:
     def __init__(self,ip_address,port):
         self.ip_address=ip_address
@@ -69,11 +96,9 @@ class Client:
                 print('File doesn\'t exist\n')
                 return ''
         elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'download':
-            if os.path.exists(self.command.split()[1]) : 
-                return self.command
-            else :
-                print('File doesn\'t exist\n')
-                return ''
+            return self.command
+        elif len(self.command.split()) == 2 and self.command.lower().split()[0] == 'rm':
+            return self.command
         else :
               return ''
 
@@ -93,30 +118,31 @@ class Client:
             self.socket_error_handler(msg,'Client_run()',client_socket)
 
         while self.command!='close':
+            print("Type a command")
             self.command = ''
             self.command = input()
             self.command = self.handleCmd()
+            print("Provided command: ", self.command)
             if self.command =='':
                 continue
-            elif self.command == 'close':
-                print('Closing socket\n')
-            else :
-                try: 
-                    print("Message send: {0}".format(self.command))
-                    client_socket.send(self.command.encode())
-                except socket.error as error:
-                    self.socket_error_handler(msg,'Client_run()',client_socket)
-
-                if len(self.command.split()) == 2 :
-                    if self.command.lower().split()[0] == 'send' :
-                        pass
-                    #    read_and_send(client_socket,self.command.split()[1])
-                    elif self.command.lower().split()[0] == 'download' :
-                        pass
-                    #    recv_file(client_socket,self.command.split()[1])
-                else :
-                    pass
-        
+            if len(self.command.split()) == 1:
+                tlv_data = tlv.Tlv_block(self.command)
+                client_socket.send(tlv_data.tlv)
+                if tlv_data.tlv[0] == 3: #list_directory
+                    get_list_directory(client_socket)
+                elif tlv_data.tlv[0] == 5: #close
+                    print('Closing socket\n')
+            elif len(self.command.split()) == 2:
+                tlv_data = tlv.Tlv_block(self.command.split()[0], self.command.split()[1])
+                client_socket.send(tlv_data.tlv)
+                client_socket.send(self.command.split()[1].encode("utf-8"))
+                if tlv_data.tlv[0] == 1: #send
+                    read_and_send(client_socket, self.command.split()[1])
+                elif tlv_data.tlv[0] == 2: #download
+                    recv_file(client_socket, self.command.split()[1])
+                elif tlv_data.tlv[0] == 4: #rm
+                    remove_file_info(client_socket)
+                
         client_socket.close()
 
 
