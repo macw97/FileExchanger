@@ -9,7 +9,7 @@ import random
 currentdir = os.path.dirname(os.path.realpath(__file__))
 parentdir = os.path.dirname(currentdir)
 sys.path.append(parentdir)
-import Tlv_block.py as tlv
+import Tlv_block as tlv
 
 PORT = 5000
 BUFFER_SIZE = 4096
@@ -35,16 +35,14 @@ def get_logger_file(name,file_path,log_level):
 def read_and_send(client_socket, filename, logger):
     logger.debug("read_and_send() Started sending file {0}".format(filename))
     tlv_data = tlv.Tlv_block("send", filename)
-    tlv_decoded = tlv.decode_tlv(tlv_data)
+    tlv_decoded = tlv.decode_tlv(tlv_data.tlv)
     client_socket.send(tlv_data.tlv)
     if tlv_decoded[2] == 0:
         logger.debug("read_and_send() Attempt to download file {0} failed, file does not exist".format(filename))
         return
-    else:
     with open(filename, "rb") as file:
         byte_read = file.read(BUFFER_SIZE)
         while byte_read:
-            logger.debug("read_and_send() sending  {0}".format(byte_read))
             client_socket.send(byte_read)
             byte_read = file.read(BUFFER_SIZE)
     logger.debug("read_and_send() Finished sending file {0}".format(filename))
@@ -57,7 +55,6 @@ def recv_file(client_socket, filename, logger, size):
         while bytes_received < size :
             byte_read = client_socket.recv(BUFFER_SIZE)
             bytes_received += len(byte_read)
-            logger.debug("recv_file(): download {0}".format(byte_read))
             file.write(byte_read)
             logger.debug("recv_file(): write to file")
         logger.debug("recv_file(): end of download")
@@ -221,6 +218,7 @@ class Server(Daemon):
                         requests[fileno] = connections[fileno].recv(TLV_SIZE)
                         self.log_file.info("Server_run(): id - {0} received tlv - {1}".format(id[fileno],requests[fileno]))
                         requests[fileno] = tlv.decode_tlv(requests[fileno])
+                        self.log_file.info("Server_run(): id - {0} decoded tlv - {1}".format(id[fileno],requests[fileno]))
                         if requests[fileno][0] == 1: #send
                             filenames[fileno] = connections[fileno].recv(requests[fileno][1])
                             self.log_file.info("Server_run(): id - {0} is sending file {1}".format(id[fileno], filenames[fileno]))
@@ -229,12 +227,14 @@ class Server(Daemon):
                         elif requests[fileno][0] == 2:  #download
                             filenames[fileno] = connections[fileno].recv(requests[fileno][1])
                             self.log_file.info("Server_run(): id - {0} is downloading file - {1}".format(id[fileno], filenames[fileno]))
+                            read_and_send(connections[fileno], filenames[fileno], self.log_file)
                         elif requests[fileno][0] == 3: #list_directory
                             send_list_directory(connections[fileno], self.log_file)
                             self.log_file.info("Server_run(): id - {0} list directory sent".format(id[fileno]))
                         elif requests[fileno][0] == 4: #rm
                             filenames[fileno] = connections[fileno].recv(requests[fileno][1])
                             self.log_file.info("Server_run(): id - {0} send request to remove file - {1}".format(id[fileno], filenames[fileno]))
+                            remove_file(connections[fileno], filenames[fileno], self.log_file)
                         elif requests[fileno][0] == 5: #close
                             epoll.unregister(fileno)
                             self.log_file.info("Server_run(): id - {0} unregister from epoll".format(id[fileno]))
