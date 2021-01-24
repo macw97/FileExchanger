@@ -15,8 +15,7 @@ PORT=5000
 def IP_validation(address):
     try:
         socket.inet_aton(address)
-    except socket.error as msg:
-        print('Address is not IPv4 : {0}'.format(msg))
+    except:
         return False
     return True
 
@@ -71,12 +70,13 @@ class Client:
         sys.exit(1)
 
     def print_commands(self):
-        print('Commands man:\n')
-        print('send - \n')
-        print('download - \n')
-        print('ls - \n')
-        print('help - \n')
-        print('rm - \n')
+        print('Commands man:')
+        print('send <filename>  - sends file to server')
+        print('download <filename>  - downloads data from server')
+        print('ls   - lists files avaiable on server ')
+        print('help - shows command description ')
+        print('rm <filename>    - removes file on server ')
+        print('close    - closes client program')
 
     def handleCmd(self):
         if self.command =='':
@@ -152,3 +152,10 @@ if __name__ == "__main__":
     if IP_validation(sys.argv[1]) :
         first_Client=Client(sys.argv[1],PORT)
         first_Client.run()
+    else:
+        try:
+            addr = socket.gethostbyname(sys.argv[1])
+            first_Client=Client(addr, PORT)
+            first_Client.run()
+        except:
+            print("Invalid address")
