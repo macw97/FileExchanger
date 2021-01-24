@@ -70,12 +70,13 @@ class Client:
         sys.exit(1)
 
     def print_commands(self):
-        print('Commands man:\n')
-        print('send - \n')
-        print('download - \n')
-        print('ls - \n')
-        print('help - \n')
-        print('rm - \n')
+        print('Commands man:')
+        print('send <filename>  - sends file to server')
+        print('download <filename>  - downloads data from server')
+        print('ls   - lists files avaiable on server ')
+        print('help - shows command description ')
+        print('rm <filename>    - removes file on server ')
+        print('close    - closes client program')
 
     def handleCmd(self):
         if self.command =='':

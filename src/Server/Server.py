@@ -66,6 +66,7 @@ def send_list_directory(client_socket, logger):
         if file == 'Server.py':
             continue
         client_socket.send(file.encode("utf-8"))
+        client_socket.send(b'\n')
     client_socket.send(b'\r\n\r')
 
 def remove_file(client_socket, filename, logger):
