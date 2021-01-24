@@ -15,8 +15,7 @@ PORT=5000
 def IP_validation(address):
     try:
         socket.inet_aton(address)
-    except socket.error as msg:
-        print('Address is not IPv4 : {0}'.format(msg))
+    except:
         return False
     return True
 
@@ -152,3 +151,10 @@ if __name__ == "__main__":
     if IP_validation(sys.argv[1]) :
         first_Client=Client(sys.argv[1],PORT)
         first_Client.run()
+    else:
+        try:
+            addr = socket.gethostbyname(sys.argv[1])
+            first_Client=Client(addr, PORT)
+            first_Client.run()
+        except:
+            print("Invalid address")
